@@ -42,8 +42,8 @@ const handleOPTIONS = async () => {
 const DEFAULT_MODEL = "gemini-1.5-flash-latest";
 const BASE_URL = "https://generativelanguage.googleapis.com";
 const API_VERSION = "v1beta";
-// https://github.com/google/generative-ai-js/blob/0931d2ce051215db72785d76fe3ae4e0bc3b5475/packages/main/src/requests/request.ts#L67
-const API_CLIENT = "genai-js/0.16.0"; // npm view @google/generative-ai version
+// https://github.com/google-gemini/generative-ai-js/blob/cf223ff4a1ee5a2d944c53cddb8976136382bee6/src/requests/request.ts#L71
+const API_CLIENT = "genai-js/0.19.0"; // npm view @google/generative-ai version
 async function handleRequest(req, apiKey) {
   const model = req.model?.startsWith("gemini-") ? req.model : DEFAULT_MODEL;
   const TASK = req.stream ? "streamGenerateContent" : "generateContent";
@@ -113,7 +113,8 @@ const harmCategory = [
   "HARM_CATEGORY_HATE_SPEECH",
   "HARM_CATEGORY_SEXUALLY_EXPLICIT",
   "HARM_CATEGORY_DANGEROUS_CONTENT",
-  "HARM_CATEGORY_HARASSMENT"
+  "HARM_CATEGORY_HARASSMENT",
+  "HARM_CATEGORY_CIVIC_INTEGRITY",
 ];
 const safetySettings = harmCategory.map((category) => ({
   category,
@@ -121,7 +122,7 @@ const safetySettings = harmCategory.map((category) => ({
 }));
 const fieldsMap = {
   stop: "stopSequences",
-  //n: "candidateCount", // { "error": { "code": 400, "message": "Only one candidate can be specified", "status": "INVALID_ARGUMENT" } }
+  n: "candidateCount", // { "error": { "code": 400, "message": "Only one candidate can be specified", "status": "INVALID_ARGUMENT" } }
   max_tokens: "maxOutputTokens",
   temperature: "temperature",
   top_p: "topP",
@@ -208,7 +209,7 @@ const transformMessages = async (messages) => {
     }
   }
   if (system_instruction && contents.length === 0) {
-    contents.push({ role: "user", parts: { text: "" } });
+    contents.push({ role: "model", parts: { text: " " } });
   }
   //console.info(JSON.stringify(contents, 2));
   return { system_instruction, contents };
@@ -236,7 +237,7 @@ const reasonsMap = { //https://ai.google.dev/api/rest/v1/GenerateContentResponse
   // :"function_call",
 };
 const transformCandidates = (key, cand) => ({
-  index: cand.index,
+  index: cand.index || 0, // 0-index is absent in new -002 models response
   [key]: { role: "assistant", content: cand.content?.parts[0].text },
   logprobs: null,
   finish_reason: reasonsMap[cand.finishReason] || cand.finishReason,
@@ -318,6 +319,7 @@ async function toOpenAiStream (chunk, controller) {
     data = { candidates };
   }
   const cand = data.candidates[0]; // !!untested with candidateCount>1
+  cand.index = cand.index || 0; // absent in new -002 models response
   if (!this.last[cand.index]) {
     controller.enqueue(transform(data, false, "first"));
   }
